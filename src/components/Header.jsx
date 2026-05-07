@@ -10,7 +10,7 @@ function YouTubeLogo() {
   )
 }
 
-function Header({ token, userInfo, login, logout }) {
+function Header({ token, userInfo, ready = true, login, logout }) {
   const MotionSection = motion.section
 
   return (
@@ -48,10 +48,11 @@ function Header({ token, userInfo, login, logout }) {
         ) : (
           <button
             onClick={login}
-            className="rounded-full bg-[#f3f3f3] px-5 py-3 text-sm font-semibold transition hover:bg-white"
+            disabled={!ready}
+            className="rounded-full bg-[#f3f3f3] px-5 py-3 text-sm font-semibold transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
             style={{ color: '#0a0a0a' }}
           >
-            Connect YouTube
+            {ready ? 'Connect YouTube' : 'Preparing YouTube...'}
           </button>
         )}
       </div>

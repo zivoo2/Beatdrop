@@ -6,6 +6,7 @@ const YOUTUBE_SCOPE =
 export function useYouTubeAuth() {
   const [token, setToken] = useState('')
   const [userInfo, setUserInfo] = useState(null)
+  const [ready, setReady] = useState(false)
   const tokenClientRef = useRef(null)
   const tokenExpiresAtRef = useRef(0)
   const pendingTokenRequestRef = useRef(null)
@@ -13,30 +14,68 @@ export function useYouTubeAuth() {
 
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
-    const gsi = window.google?.accounts?.oauth2
-    if (!clientId || !gsi) return
+    if (!clientId) {
+      setReady(false)
+      return
+    }
 
-    tokenClientRef.current = gsi.initTokenClient({
-      client_id: clientId,
-      scope: YOUTUBE_SCOPE,
-      callback: (response) => {
-        const pendingRequest = pendingTokenRequestRef.current
-        pendingTokenRequestRef.current = null
+    let cancelled = false
 
-        if (response?.error) {
-          pendingRequest?.reject(new Error(response.error))
-          return
-        }
+    const initializeTokenClient = () => {
+      const gsi = window.google?.accounts?.oauth2
+      if (!gsi || cancelled) {
+        return false
+      }
 
-        if (response?.access_token) {
-          const expiresInSeconds = Number(response.expires_in || 0)
-          tokenExpiresAtRef.current = Date.now() + Math.max(expiresInSeconds - 30, 0) * 1000
-          grantedAccessRef.current = true
-          setToken(response.access_token)
-          pendingRequest?.resolve(response.access_token)
-        }
-      },
-    })
+      tokenClientRef.current = gsi.initTokenClient({
+        client_id: clientId,
+        scope: YOUTUBE_SCOPE,
+        callback: (response) => {
+          const pendingRequest = pendingTokenRequestRef.current
+          pendingTokenRequestRef.current = null
+
+          if (response?.error) {
+            pendingRequest?.reject(new Error(response.error))
+            return
+          }
+
+          if (response?.access_token) {
+            const expiresInSeconds = Number(response.expires_in || 0)
+            tokenExpiresAtRef.current = Date.now() + Math.max(expiresInSeconds - 30, 0) * 1000
+            grantedAccessRef.current = true
+            setToken(response.access_token)
+            pendingRequest?.resolve(response.access_token)
+          }
+        },
+      })
+
+      setReady(true)
+      return true
+    }
+
+    if (initializeTokenClient()) {
+      return () => {
+        cancelled = true
+      }
+    }
+
+    setReady(false)
+
+    const retryTimer = window.setInterval(() => {
+      if (initializeTokenClient()) {
+        window.clearInterval(retryTimer)
+      }
+    }, 250)
+
+    const stopRetryTimer = window.setTimeout(() => {
+      window.clearInterval(retryTimer)
+    }, 10000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(retryTimer)
+      window.clearTimeout(stopRetryTimer)
+    }
   }, [])
 
   useEffect(() => {
@@ -96,5 +135,5 @@ export function useYouTubeAuth() {
     pendingTokenRequestRef.current = null
   }, [])
 
-  return { token, userInfo, login, logout, ensureValidToken }
+  return { token, userInfo, ready, login, logout, ensureValidToken }
 }

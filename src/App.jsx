@@ -315,6 +315,7 @@ function App() {
   const {
     token: youtubeToken,
     userInfo: youtubeUserInfo,
+    ready: youtubeReady,
     login: loginYouTube,
     logout: logoutYouTube,
     ensureValidToken: ensureValidYouTubeToken,
@@ -518,7 +519,7 @@ function App() {
         <div className="sticky top-0 z-40 border-b border-white/8 bg-[#0a0a0a]/82 backdrop-blur-xl">
           <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 md:px-8">
             <a href="#home" className="inline-flex items-center">
-              <BrandMark isPro={isProPlan} />
+              <BrandMark isPro={isProPlan} size="large" />
             </a>
             <div className="flex items-center gap-3">
               {isAuthenticated ? (
@@ -635,7 +636,13 @@ function App() {
           </MotionSection>
 
           <div className="grid gap-4">
-            <Header token={youtubeToken} userInfo={youtubeUserInfo} login={loginYouTube} logout={logoutYouTube} />
+            <Header
+              token={youtubeToken}
+              userInfo={youtubeUserInfo}
+              ready={youtubeReady}
+              login={loginYouTube}
+              logout={logoutYouTube}
+            />
             {!isAuthenticated ? (
               <MotionSection
                 initial={{ opacity: 0, y: 12 }}
