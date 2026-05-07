@@ -12,7 +12,9 @@ import {
   deleteSession,
   getSession,
   sanitizeUser,
+  upsertGoogleUser,
 } from './authStore.js'
+import { verifyGoogleIdToken } from './googleAuth.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -24,6 +26,7 @@ const APP_URL = process.env.APP_URL || 'http://127.0.0.1:4173'
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || ''
 const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID || ''
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || ''
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || ''
 
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null
 const app = express()
@@ -579,6 +582,41 @@ app.post('/api/auth/login', async (req, res) => {
     })
   } catch (error) {
     res.status(500).json({ error: error.message || 'Could not log in.' })
+  }
+})
+
+app.post('/api/auth/google', async (req, res) => {
+  const credential = String(req.body?.credential || '').trim()
+
+  if (!credential) {
+    res.status(400).json({ error: 'Missing Google credential.' })
+    return
+  }
+
+  try {
+    const payload = await verifyGoogleIdToken(credential, GOOGLE_CLIENT_ID)
+    const email = String(payload.email || '').trim().toLowerCase()
+    const emailVerified = payload.email_verified === true || payload.email_verified === 'true'
+
+    if (!email || !emailVerified) {
+      res.status(401).json({ error: 'Google did not return a verified email address.' })
+      return
+    }
+
+    const user = await upsertGoogleUser({
+      email,
+      name: String(payload.name || '').trim(),
+      googleSubject: String(payload.sub || '').trim(),
+      avatarUrl: String(payload.picture || '').trim(),
+    })
+    const session = await createSession(user.email)
+
+    res.json({
+      token: session.token,
+      user: sanitizeUser(user),
+    })
+  } catch (error) {
+    res.status(401).json({ error: error.message || 'Google Sign-In failed.' })
   }
 })
 

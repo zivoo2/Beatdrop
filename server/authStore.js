@@ -113,6 +113,14 @@ export async function getUserByEmail(email) {
   return store.usersByEmail[normalizedEmail] || null
 }
 
+function findUserByGoogleSubject(store, googleSubject) {
+  if (!googleSubject) return null
+
+  return (
+    Object.values(store.usersByEmail).find((user) => user.googleSubject === googleSubject) || null
+  )
+}
+
 export async function createUser({ email, password, name }) {
   const normalizedEmail = normalizeEmail(email)
   if (!normalizedEmail) {
@@ -132,6 +140,7 @@ export async function createUser({ email, password, name }) {
     id: randomUUID(),
     email: normalizedEmail,
     name: String(name || '').trim(),
+    authProvider: 'password',
     passwordHash: hashPassword(trimmedPassword),
     createdAt: now,
     updatedAt: now,
@@ -150,6 +159,53 @@ export async function authenticateUser({ email, password }) {
   }
 
   return user
+}
+
+export async function upsertGoogleUser({ email, name, googleSubject, avatarUrl = '' }) {
+  const normalizedEmail = normalizeEmail(email)
+  if (!normalizedEmail) {
+    throw new Error('A valid email address is required.')
+  }
+
+  if (!googleSubject) {
+    throw new Error('Missing Google account identifier.')
+  }
+
+  const store = await readStore()
+  const existingByEmail = store.usersByEmail[normalizedEmail]
+  const existingBySubject = findUserByGoogleSubject(store, googleSubject)
+  const existingUser = existingByEmail || existingBySubject
+  const now = new Date().toISOString()
+
+  const nextUser = existingUser
+    ? {
+        ...existingUser,
+        email: normalizedEmail,
+        name: String(name || existingUser.name || '').trim(),
+        authProvider: existingUser.authProvider || 'google',
+        googleSubject,
+        avatarUrl: avatarUrl || existingUser.avatarUrl || '',
+        updatedAt: now,
+      }
+    : {
+        id: randomUUID(),
+        email: normalizedEmail,
+        name: String(name || '').trim(),
+        authProvider: 'google',
+        passwordHash: '',
+        googleSubject,
+        avatarUrl: avatarUrl || '',
+        createdAt: now,
+        updatedAt: now,
+      }
+
+  if (existingUser?.email && existingUser.email !== normalizedEmail) {
+    delete store.usersByEmail[existingUser.email]
+  }
+
+  store.usersByEmail[normalizedEmail] = nextUser
+  await writeStore(store)
+  return nextUser
 }
 
 export async function createSession(email) {

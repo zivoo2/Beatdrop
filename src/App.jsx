@@ -6,6 +6,7 @@ import CoverCropPanel from './components/CoverCropPanel'
 import PresetsPanel from './components/PresetsPanel'
 import VideoDetailsForm from './components/VideoDetailsForm'
 import ConvertUploadPanel from './components/ConvertUploadPanel'
+import GoogleSignInButton from './components/GoogleSignInButton'
 import { useAuth } from './hooks/useAuth'
 import { useYouTubeAuth } from './hooks/useYouTubeAuth'
 import { useBilling } from './hooks/useBilling'
@@ -232,6 +233,7 @@ function App() {
     isAuthenticated,
     login: loginAccount,
     signup,
+    googleLogin,
     logout: logoutAccount,
   } = useAuth()
   const {
@@ -399,6 +401,17 @@ function App() {
         email: '',
         password: '',
       })
+      window.location.hash = '#studio'
+    } catch {
+      // Error state is handled by the auth hook.
+    }
+  }
+
+  const handleGoogleLogin = async (credential) => {
+    setAuthFormError('')
+
+    try {
+      await googleLogin({ credential })
       window.location.hash = '#studio'
     } catch {
       // Error state is handled by the auth hook.
@@ -1160,6 +1173,24 @@ function App() {
                       <p>Stripe checks Pro access against your account email.</p>
                       <p>YouTube publishing stays separate and can be connected inside Studio.</p>
                     </div>
+
+                    <div className="mt-5 rounded-3xl border border-white/8 bg-[#0d0d0f] p-4">
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-white/45">Google Sign-In</p>
+                      <p className="mt-2 text-sm leading-7 text-white/60">
+                        Use your Google account as a BeatDrop login option. We&apos;ll still create a normal BeatDrop
+                        session for billing and studio access.
+                      </p>
+                      <div className="mt-4">
+                        <GoogleSignInButton
+                          mode={authMode}
+                          disabled={authLoading || Boolean(authActionLoading)}
+                          onCredential={handleGoogleLogin}
+                          onError={(error) => {
+                            setAuthFormError(error?.message || 'Google Sign-In failed.')
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
                   <form onSubmit={handleAuthSubmit} className="grid gap-3">
                     {authMode === 'signup' && (
@@ -1209,9 +1240,21 @@ function App() {
                       </div>
                     )}
 
+                    <div className="relative py-1">
+                      <div className="absolute inset-x-0 top-1/2 border-t border-white/10" />
+                      <span className="relative inline-flex bg-[linear-gradient(180deg,rgba(255,255,255,0.05)_0%,rgba(255,255,255,0.025)_100%)] pr-3 text-xs uppercase tracking-[0.18em] text-white/38">
+                        Or continue with email
+                      </span>
+                    </div>
+
                     <motion.button
                       type="submit"
-                      disabled={authLoading || authActionLoading === 'login' || authActionLoading === 'signup'}
+                      disabled={
+                        authLoading ||
+                        authActionLoading === 'login' ||
+                        authActionLoading === 'signup' ||
+                        authActionLoading === 'google'
+                      }
                       className="inline-flex items-center justify-center rounded-full bg-[#f3f3f3] px-6 py-3 text-sm font-semibold transition-all duration-300 hover:bg-white hover:shadow-[0_12px_30px_rgba(243,243,243,0.18)] disabled:cursor-not-allowed disabled:opacity-55"
                       style={{ color: '#0a0a0a' }}
                       whileHover={{ y: -3, scale: 1.01 }}
@@ -1223,6 +1266,8 @@ function App() {
                           : 'Create Account'
                         : authActionLoading === 'login'
                           ? 'Logging In...'
+                          : authActionLoading === 'google'
+                            ? 'Signing In with Google...'
                           : 'Log In'}
                     </motion.button>
                   </form>

@@ -107,6 +107,11 @@ export function useAuth() {
     [authenticate],
   )
 
+  const googleLogin = useCallback(
+    async ({ credential }) => authenticate('/api/auth/google', { credential }, 'google'),
+    [authenticate],
+  )
+
   const logout = useCallback(async () => {
     const currentToken = token
     persistToken('')
@@ -137,6 +142,7 @@ export function useAuth() {
     isAuthenticated: Boolean(user?.email),
     login,
     signup,
+    googleLogin,
     logout,
     refreshSession: fetchSession,
   }
