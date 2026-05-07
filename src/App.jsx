@@ -57,6 +57,7 @@ const PRO_PLAN_FEATURES = [
 ]
 
 const PRIVACY_LAST_UPDATED = 'April 7, 2026'
+const TERMS_LAST_UPDATED = 'May 6, 2026'
 
 const PRIVACY_SECTIONS = [
   {
@@ -146,6 +147,80 @@ const PRIVACY_SECTIONS = [
   },
 ]
 
+const TERMS_SECTIONS = [
+  {
+    title: 'Acceptance of Terms',
+    body:
+      'By accessing or using BeatDrop, you agree to these Terms of Service. If you do not agree, do not use the service.',
+    bullets: [],
+  },
+  {
+    title: 'What BeatDrop Provides',
+    body:
+      'BeatDrop helps users prepare media, generate upload-ready video assets, manage account access, and publish content to connected third-party services such as YouTube.',
+    bullets: [
+      'Some features depend on third-party platforms including Google, YouTube, and Stripe.',
+      'Features, pricing, and availability may change as the product evolves.',
+    ],
+  },
+  {
+    title: 'Accounts',
+    body:
+      'You are responsible for the accuracy of the information used to create your account and for activity that occurs under your account.',
+    bullets: [
+      'Keep your login credentials secure.',
+      'You must use a verified and accurate email address.',
+      'We may suspend or terminate access if an account is used for abuse, fraud, or unlawful activity.',
+    ],
+  },
+  {
+    title: 'User Content and Uploads',
+    body:
+      'You retain responsibility for the audio, images, metadata, and other content you upload or publish through BeatDrop.',
+    bullets: [
+      'You must have the rights and permissions needed to use and publish your content.',
+      'You may not use BeatDrop to upload unlawful, infringing, deceptive, or abusive material.',
+      'When you connect YouTube and request a publish action, you authorize BeatDrop to send the selected content and metadata on your behalf.',
+    ],
+  },
+  {
+    title: 'Third-Party Services',
+    body:
+      'BeatDrop integrates with third-party services, and your use of those services remains subject to their own terms and policies.',
+    bullets: [
+      'Google and YouTube features are subject to Google and YouTube terms.',
+      'Billing features are subject to Stripe terms and the billing configuration associated with your account.',
+    ],
+  },
+  {
+    title: 'Payments and Subscriptions',
+    body:
+      'Paid features, if enabled, are billed through Stripe or another designated payment provider.',
+    bullets: [
+      'Subscription access may change if billing fails, is canceled, or expires.',
+      'You are responsible for reviewing pricing and renewal details before subscribing.',
+    ],
+  },
+  {
+    title: 'Service Availability',
+    body:
+      'BeatDrop is provided on an as-is and as-available basis. We do not guarantee uninterrupted availability, error-free operation, or permanent storage of account or project data.',
+    bullets: [],
+  },
+  {
+    title: 'Limitation of Liability',
+    body:
+      'To the maximum extent permitted by law, BeatDrop is not liable for indirect, incidental, special, consequential, or punitive damages arising from your use of the service.',
+    bullets: [],
+  },
+  {
+    title: 'Changes and Contact',
+    body:
+      'We may update these Terms of Service from time to time. Continued use of BeatDrop after updates means you accept the revised terms.',
+    bullets: ['Questions about these terms can be sent to hello@beatdrop.studio.'],
+  },
+]
+
 const studioPanelClass =
   'rounded-[28px] border border-white/8 bg-[#111111] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.36)]'
 
@@ -180,6 +255,7 @@ function getRouteFromHash(hash) {
   if (hash === '#upgrade') return 'upgrade'
   if (hash === '#login') return 'login'
   if (hash === '#privacy') return 'privacy'
+  if (hash === '#terms') return 'terms'
   return 'landing'
 }
 
@@ -478,6 +554,13 @@ function App() {
                 className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
               >
                 Privacy
+              </a>
+              <a
+                href="#terms"
+                onClick={navigateToHash('#terms')}
+                className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
+              >
+                Terms
               </a>
               <a href="#contact" className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block">
                 Contact
@@ -1067,6 +1150,13 @@ function App() {
                 Studio
               </a>
               <a
+                href="#terms"
+                onClick={navigateToHash('#terms')}
+                className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
+              >
+                Terms
+              </a>
+              <a
                 href="#home"
                 onClick={navigateToHash('#home')}
                 className="rounded-full border border-white/20 bg-[#f3f3f3] px-5 py-2.5 text-sm font-semibold shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)] transition hover:bg-white"
@@ -1173,6 +1263,17 @@ function App() {
                       <p>Stripe checks Pro access against your account email.</p>
                       <p>YouTube publishing stays separate and can be connected inside Studio.</p>
                     </div>
+                    <p className="mt-4 text-xs leading-6 text-white/45">
+                      By continuing, you agree to BeatDrop&apos;s{' '}
+                      <a href="#terms" onClick={navigateToHash('#terms')} className="text-white underline">
+                        Terms of Service
+                      </a>{' '}
+                      and{' '}
+                      <a href="#privacy" onClick={navigateToHash('#privacy')} className="text-white underline">
+                        Privacy Policy
+                      </a>
+                      .
+                    </p>
 
                     <div className="mt-5 rounded-3xl border border-white/8 bg-[#0d0d0f] p-4">
                       <p className="text-xs font-medium uppercase tracking-[0.18em] text-white/45">Google Sign-In</p>
@@ -1280,6 +1381,151 @@ function App() {
     )
   }
 
+  if (route === 'terms') {
+    return (
+      <MotionMain
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="min-h-screen bg-[#0a0a0a] text-white"
+      >
+        <div className="sticky top-0 z-40 border-b border-white/8 bg-[#0a0a0a]/82 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 md:px-8">
+            <a href="#home" className="inline-flex items-center">
+              <BrandMark isPro={isProPlan} size="large" />
+            </a>
+            <div className="flex items-center gap-3">
+              <a
+                href="#upgrade"
+                onClick={navigateToHash('#upgrade')}
+                className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
+              >
+                Upgrade
+              </a>
+              <a
+                href="#login"
+                onClick={navigateToHash('#login')}
+                className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
+              >
+                Login
+              </a>
+              <a
+                href="#studio"
+                onClick={navigateToHash('#studio')}
+                className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
+              >
+                Studio
+              </a>
+              <a
+                href="#privacy"
+                onClick={navigateToHash('#privacy')}
+                className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
+              >
+                Privacy
+              </a>
+              <a
+                href="#home"
+                onClick={navigateToHash('#home')}
+                className="rounded-full border border-white/20 bg-[#f3f3f3] px-5 py-2.5 text-sm font-semibold shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)] transition hover:bg-white"
+                style={{ color: '#0a0a0a' }}
+              >
+                Back
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative overflow-hidden border-b border-white/6">
+          <div className="absolute inset-0 bg-[#0a0a0a]" />
+          <motion.div
+            aria-hidden="true"
+            className="absolute inset-0 opacity-70"
+            animate={{ scale: [1, 1.08, 1], x: [0, 30, -20, 0], y: [0, -20, 15, 0] }}
+            transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
+            style={{
+              background:
+                'radial-gradient(circle at 18% 22%, rgba(34,197,94,0.18), transparent 30%), radial-gradient(circle at 78% 28%, rgba(245,158,11,0.16), transparent 32%), radial-gradient(circle at 50% 78%, rgba(244,114,182,0.14), transparent 34%)',
+            }}
+          />
+          <div aria-hidden="true" className="absolute inset-0 opacity-[0.11]" style={noiseStyle} />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(10,10,10,0.20)_0%,rgba(10,10,10,0.46)_58%,rgba(10,10,10,0.82)_100%)]" />
+
+          <div className="relative z-10 mx-auto max-w-7xl px-4 py-24 md:px-8 md:py-28">
+            <div className="max-w-4xl">
+              <span className="inline-flex rounded-full border border-white/12 bg-white/4 px-4 py-1.5 text-sm font-medium uppercase tracking-[0.24em] text-white/70">
+                Terms of Service
+              </span>
+              <h1 className="mt-8 text-5xl font-extrabold leading-[0.94] tracking-[-0.06em] text-white md:text-7xl">
+                The basic terms for using BeatDrop.
+              </h1>
+              <p className="mt-7 max-w-3xl text-lg leading-9 text-white/70 md:text-xl">
+                Last updated {TERMS_LAST_UPDATED}. These terms cover account use, content responsibility,
+                third-party integrations, billing, and general limits around the service.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mx-auto max-w-5xl px-4 py-8 md:px-8 md:py-12">
+          <MotionSection
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45 }}
+            className="rounded-[36px] border border-white/8 bg-[#111111] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.38)] md:p-10"
+          >
+            <div className="grid gap-5">
+              {TERMS_SECTIONS.map((section) => (
+                <div key={section.title} className="rounded-[28px] border border-white/8 bg-white/[0.03] p-5 md:p-6">
+                  <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">{section.title}</h2>
+                  {section.body ? (
+                    <p className="mt-3 text-sm leading-7 text-white/64 md:text-base">{section.body}</p>
+                  ) : null}
+                  {section.bullets.length > 0 ? (
+                    <ul className="mt-4 grid gap-3 text-sm leading-7 text-white/72 md:text-base">
+                      {section.bullets.map((item) => (
+                        <li key={item} className="rounded-2xl border border-white/8 bg-[#0d0d0f] px-4 py-3">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 rounded-[28px] border border-[#d4b15a]/16 bg-[linear-gradient(180deg,rgba(212,177,90,0.12)_0%,rgba(212,177,90,0.03)_26%,rgba(255,255,255,0.02)_100%)] p-6 shadow-[0_18px_40px_rgba(0,0,0,0.24),0_0_26px_rgba(212,177,90,0.08)]">
+              <p className="text-xs font-medium uppercase tracking-[0.24em] text-[#f3d58f]">Related Links</p>
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <a
+                  href="#privacy"
+                  onClick={navigateToHash('#privacy')}
+                  className="inline-flex items-center justify-center rounded-full border border-[#d4b15a]/28 bg-[rgba(212,177,90,0.10)] px-5 py-3 text-sm font-semibold text-[#f3d58f] transition hover:bg-[rgba(212,177,90,0.16)]"
+                >
+                  Privacy Policy
+                </a>
+                <a
+                  href="https://policies.google.com/terms"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center rounded-full border border-[#d4b15a]/28 bg-[rgba(212,177,90,0.10)] px-5 py-3 text-sm font-semibold text-[#f3d58f] transition hover:bg-[rgba(212,177,90,0.16)]"
+                >
+                  Google Terms
+                </a>
+                <a
+                  href="https://developers.google.com/youtube/terms/api-services-terms-of-service"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center rounded-full border border-[#d4b15a]/28 bg-[rgba(212,177,90,0.10)] px-5 py-3 text-sm font-semibold text-[#f3d58f] transition hover:bg-[rgba(212,177,90,0.16)]"
+                >
+                  YouTube API Terms
+                </a>
+              </div>
+            </div>
+          </MotionSection>
+        </div>
+      </MotionMain>
+    )
+  }
+
   if (route === 'privacy') {
     return (
       <MotionMain
@@ -1313,6 +1559,13 @@ function App() {
                 className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
               >
                 Studio
+              </a>
+              <a
+                href="#terms"
+                onClick={navigateToHash('#terms')}
+                className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
+              >
+                Terms
               </a>
               <a
                 href="#home"
@@ -1458,16 +1711,23 @@ function App() {
             <a href="#faq" className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block">
               FAQ
             </a>
-            <a
-              href="#privacy"
-              onClick={navigateToHash('#privacy')}
-              className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
-            >
-              Privacy
-            </a>
-            <a href="#contact" className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block">
-              Contact
-            </a>
+              <a
+                href="#privacy"
+                onClick={navigateToHash('#privacy')}
+                className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
+              >
+                Privacy
+              </a>
+              <a
+                href="#terms"
+                onClick={navigateToHash('#terms')}
+                className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
+              >
+                Terms
+              </a>
+              <a href="#contact" className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block">
+                Contact
+              </a>
               <a
                 href="#studio"
                 className="rounded-full border border-white/20 bg-[#f3f3f3] px-5 py-2.5 text-sm font-semibold shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)] transition hover:bg-white"
@@ -1652,6 +1912,13 @@ function App() {
                 className="inline-flex items-center justify-center rounded-full border border-white/12 bg-transparent px-7 py-4 text-base font-semibold text-white transition hover:border-white/24 hover:bg-white/4"
               >
                 Privacy Policy
+              </a>
+              <a
+                href="#terms"
+                onClick={navigateToHash('#terms')}
+                className="inline-flex items-center justify-center rounded-full border border-white/12 bg-transparent px-7 py-4 text-base font-semibold text-white transition hover:border-white/24 hover:bg-white/4"
+              >
+                Terms of Service
               </a>
             </div>
           </div>
