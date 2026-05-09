@@ -316,6 +316,8 @@ function App() {
     token: youtubeToken,
     userInfo: youtubeUserInfo,
     ready: youtubeReady,
+    loading: youtubeLoading,
+    error: youtubeError,
     login: loginYouTube,
     logout: logoutYouTube,
     ensureValidToken: ensureValidYouTubeToken,
@@ -640,6 +642,8 @@ function App() {
               token={youtubeToken}
               userInfo={youtubeUserInfo}
               ready={youtubeReady}
+              loading={youtubeLoading}
+              error={youtubeError}
               login={loginYouTube}
               logout={logoutYouTube}
             />

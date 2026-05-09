@@ -21,8 +21,27 @@ const __dirname = path.dirname(__filename)
 const projectRoot = path.resolve(__dirname, '..')
 const distPath = path.join(projectRoot, 'dist')
 
+function normalizeAppUrl(rawValue, fallback = 'http://127.0.0.1:4173') {
+  const fallbackUrl = String(fallback || 'http://127.0.0.1:4173').trim().replace(/\/+$/, '')
+  const rawAppUrl = String(rawValue || '').trim()
+
+  if (!rawAppUrl) {
+    return fallbackUrl
+  }
+
+  const withoutKeyPrefix = rawAppUrl.replace(/^APP_URL\s*=\s*/i, '').trim()
+  const withoutWrappingQuotes = withoutKeyPrefix.replace(/^['"]|['"]$/g, '')
+
+  try {
+    return new URL(withoutWrappingQuotes).toString().replace(/\/+$/, '')
+  } catch {
+    console.warn(`Invalid APP_URL value "${rawAppUrl}". Falling back to ${fallbackUrl}.`)
+    return fallbackUrl
+  }
+}
+
 const PORT = Number(process.env.PORT || 4242)
-const APP_URL = process.env.APP_URL || 'http://127.0.0.1:4173'
+const APP_URL = normalizeAppUrl(process.env.APP_URL)
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || ''
 const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID || ''
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || ''

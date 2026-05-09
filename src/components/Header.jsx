@@ -10,7 +10,7 @@ function YouTubeLogo() {
   )
 }
 
-function Header({ token, userInfo, ready = true, login, logout }) {
+function Header({ token, userInfo, ready = true, loading = false, error = '', login, logout }) {
   const MotionSection = motion.section
 
   return (
@@ -46,14 +46,21 @@ function Header({ token, userInfo, ready = true, login, logout }) {
             </button>
           </div>
         ) : (
-          <button
-            onClick={login}
-            disabled={!ready}
-            className="rounded-full bg-[#f3f3f3] px-5 py-3 text-sm font-semibold transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-            style={{ color: '#0a0a0a' }}
-          >
-            {ready ? 'Connect YouTube' : 'Preparing YouTube...'}
-          </button>
+          <div className="flex max-w-sm flex-col items-start gap-3 sm:items-end">
+            <button
+              onClick={login}
+              disabled={!ready || loading}
+              className="rounded-full bg-[#f3f3f3] px-5 py-3 text-sm font-semibold transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ color: '#0a0a0a' }}
+            >
+              {!ready ? 'Preparing YouTube...' : loading ? 'Connecting...' : 'Connect YouTube'}
+            </button>
+            {error ? (
+              <p className="text-sm leading-6 text-[#ffb4ae] sm:text-right">
+                {error}
+              </p>
+            ) : null}
+          </div>
         )}
       </div>
     </MotionSection>
