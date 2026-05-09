@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import Header from './components/Header'
 import UploadZone from './components/UploadZone'
 import CoverCropPanel from './components/CoverCropPanel'
-import PresetsPanel from './components/PresetsPanel'
 import VideoDetailsForm from './components/VideoDetailsForm'
 import ConvertUploadPanel from './components/ConvertUploadPanel'
 import GoogleSignInButton from './components/GoogleSignInButton'
@@ -278,10 +277,352 @@ function BrandMark({ isPro = false, size = 'default' }) {
   )
 }
 
+function getAccountInitial(user) {
+  const source = String(user?.name || user?.email || '').trim()
+  if (!source) return 'A'
+
+  const parts = source.split(/\s+/).filter(Boolean)
+  if (parts.length > 1) {
+    return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase()
+  }
+
+  return source.slice(0, 2).toUpperCase()
+}
+
+const KEYBOARD_CURVE = {
+  start: { x: -10, y: 17 },
+  controlA: { x: 14, y: 6 },
+  controlB: { x: 47, y: 68 },
+  end: { x: 110, y: 73 },
+}
+
+const HERO_WHITE_KEY_COUNT = 36
+const HERO_KEYBOARD_HALF_WIDTH = 4.5
+const KEYBOARD_CURVE_SAMPLE_COUNT = 180
+const BLACK_KEY_AFTER_WHITE_INDEXES = new Set([0, 1, 3, 4, 5])
+
+function getCurvePoint(t) {
+  const inverse = 1 - t
+  const inverseSquared = inverse * inverse
+  const tSquared = t * t
+
+  return {
+    x:
+      inverseSquared * inverse * KEYBOARD_CURVE.start.x +
+      3 * inverseSquared * t * KEYBOARD_CURVE.controlA.x +
+      3 * inverse * tSquared * KEYBOARD_CURVE.controlB.x +
+      tSquared * t * KEYBOARD_CURVE.end.x,
+    y:
+      inverseSquared * inverse * KEYBOARD_CURVE.start.y +
+      3 * inverseSquared * t * KEYBOARD_CURVE.controlA.y +
+      3 * inverse * tSquared * KEYBOARD_CURVE.controlB.y +
+      tSquared * t * KEYBOARD_CURVE.end.y,
+  }
+}
+
+const KEYBOARD_CURVE_SAMPLES = Array.from({ length: KEYBOARD_CURVE_SAMPLE_COUNT + 1 }, (_, index) => ({
+  t: index / KEYBOARD_CURVE_SAMPLE_COUNT,
+  point: getCurvePoint(index / KEYBOARD_CURVE_SAMPLE_COUNT),
+})).reduce((samples, sample, index) => {
+  if (index === 0) {
+    return [{ ...sample, distance: 0 }]
+  }
+
+  const previous = samples[index - 1]
+  const distance = previous.distance + Math.hypot(sample.point.x - previous.point.x, sample.point.y - previous.point.y)
+
+  return [...samples, { ...sample, distance }]
+}, [])
+
+const KEYBOARD_CURVE_LENGTH = KEYBOARD_CURVE_SAMPLES[KEYBOARD_CURVE_SAMPLES.length - 1].distance
+
+function getCurveTAtDistanceRatio(ratio) {
+  const targetDistance = KEYBOARD_CURVE_LENGTH * Math.min(Math.max(ratio, 0), 1)
+  const nextSampleIndex = KEYBOARD_CURVE_SAMPLES.findIndex((sample) => sample.distance >= targetDistance)
+
+  if (nextSampleIndex <= 0) return 0
+
+  const previous = KEYBOARD_CURVE_SAMPLES[nextSampleIndex - 1]
+  const next = KEYBOARD_CURVE_SAMPLES[nextSampleIndex]
+  const span = next.distance - previous.distance || 1
+  const localRatio = (targetDistance - previous.distance) / span
+
+  return previous.t + (next.t - previous.t) * localRatio
+}
+
+function getCurveNormal(t) {
+  const inverse = 1 - t
+  const dx =
+    3 * inverse * inverse * (KEYBOARD_CURVE.controlA.x - KEYBOARD_CURVE.start.x) +
+    6 * inverse * t * (KEYBOARD_CURVE.controlB.x - KEYBOARD_CURVE.controlA.x) +
+    3 * t * t * (KEYBOARD_CURVE.end.x - KEYBOARD_CURVE.controlB.x)
+  const dy =
+    3 * inverse * inverse * (KEYBOARD_CURVE.controlA.y - KEYBOARD_CURVE.start.y) +
+    6 * inverse * t * (KEYBOARD_CURVE.controlB.y - KEYBOARD_CURVE.controlA.y) +
+    3 * t * t * (KEYBOARD_CURVE.end.y - KEYBOARD_CURVE.controlB.y)
+  const length = Math.hypot(dx, dy) || 1
+
+  return {
+    x: -dy / length,
+    y: dx / length,
+  }
+}
+
+function getCurveOffsetPoint(t, offset) {
+  const point = getCurvePoint(t)
+  const normal = getCurveNormal(t)
+
+  return {
+    x: point.x + normal.x * offset,
+    y: point.y + normal.y * offset,
+  }
+}
+
+function getCurvedKeyPoints(startRatio, endRatio, topOffset, bottomOffset) {
+  const tStart = getCurveTAtDistanceRatio(startRatio)
+  const tEnd = getCurveTAtDistanceRatio(endRatio)
+  return [
+    getCurveOffsetPoint(tStart, topOffset),
+    getCurveOffsetPoint(tEnd, topOffset),
+    getCurveOffsetPoint(tEnd, bottomOffset),
+    getCurveOffsetPoint(tStart, bottomOffset),
+  ]
+}
+
+function getRoundedShapePath(points, radius = 0.3) {
+  const clampRadius = (pointA, pointB, pointC) => {
+    const previousLength = Math.hypot(pointA.x - pointB.x, pointA.y - pointB.y)
+    const nextLength = Math.hypot(pointC.x - pointB.x, pointC.y - pointB.y)
+
+    return Math.min(radius, previousLength * 0.32, nextLength * 0.32)
+  }
+
+  const offsetPoint = (from, to, distance) => {
+    const dx = to.x - from.x
+    const dy = to.y - from.y
+    const length = Math.hypot(dx, dy) || 1
+
+    return {
+      x: from.x + (dx / length) * distance,
+      y: from.y + (dy / length) * distance,
+    }
+  }
+
+  const segments = points.map((point, index) => {
+    const previous = points[(index - 1 + points.length) % points.length]
+    const next = points[(index + 1) % points.length]
+    const localRadius = clampRadius(previous, point, next)
+
+    return {
+      start: offsetPoint(point, previous, localRadius),
+      corner: point,
+      end: offsetPoint(point, next, localRadius),
+    }
+  })
+
+  const [first, ...rest] = segments
+
+  return `M ${first.end.x.toFixed(2)} ${first.end.y.toFixed(2)} ${rest
+    .map(
+      (segment) =>
+        `L ${segment.start.x.toFixed(2)} ${segment.start.y.toFixed(2)} Q ${segment.corner.x.toFixed(2)} ${segment.corner.y.toFixed(2)} ${segment.end.x.toFixed(2)} ${segment.end.y.toFixed(2)}`,
+    )
+    .join(' ')} L ${first.start.x.toFixed(2)} ${first.start.y.toFixed(2)} Q ${first.corner.x.toFixed(2)} ${first.corner.y.toFixed(2)} ${first.end.x.toFixed(2)} ${first.end.y.toFixed(2)} Z`
+}
+
+function getKeyboardEdgePath(offset) {
+  const start = getCurveOffsetPoint(0, offset)
+  const samples = Array.from({ length: 40 }, (_, index) =>
+    getCurveOffsetPoint(getCurveTAtDistanceRatio((index + 1) / 40), offset),
+  )
+
+  return `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} ${samples
+    .map((point) => `L ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(' ')}`
+}
+
+function getKeyboardBodyPath() {
+  const top = Array.from({ length: 41 }, (_, index) =>
+    getCurveOffsetPoint(getCurveTAtDistanceRatio(index / 40), -HERO_KEYBOARD_HALF_WIDTH),
+  )
+  const bottom = Array.from({ length: 41 }, (_, index) =>
+    getCurveOffsetPoint(getCurveTAtDistanceRatio(index / 40), HERO_KEYBOARD_HALF_WIDTH),
+  ).reverse()
+  const [start, ...rest] = [...top, ...bottom]
+
+  return `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} ${rest
+    .map((point) => `L ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(' ')} Z`
+}
+
+function HeroMidiBackdrop() {
+  const whiteKeys = Array.from({ length: HERO_WHITE_KEY_COUNT }, (_, index) => {
+    const startRatio = index / HERO_WHITE_KEY_COUNT
+    const endRatio = (index + 1) / HERO_WHITE_KEY_COUNT
+
+    return {
+      index,
+      path: getRoundedShapePath(
+        getCurvedKeyPoints(
+          startRatio,
+          endRatio,
+          -HERO_KEYBOARD_HALF_WIDTH + 0.48,
+          HERO_KEYBOARD_HALF_WIDTH - 0.48,
+        ),
+        0.22,
+      ),
+    }
+  })
+  const blackKeys = Array.from({ length: HERO_WHITE_KEY_COUNT - 1 }, (_, index) => index)
+    .filter((index) => BLACK_KEY_AFTER_WHITE_INDEXES.has(index % 7))
+    .map((index) => {
+      const centerRatio = (index + 1) / HERO_WHITE_KEY_COUNT
+      const halfWidthRatio = 0.24 / HERO_WHITE_KEY_COUNT
+
+      return {
+        index,
+        path: getRoundedShapePath(
+          getCurvedKeyPoints(
+            centerRatio - halfWidthRatio,
+            centerRatio + halfWidthRatio,
+            -HERO_KEYBOARD_HALF_WIDTH + 0.42,
+            0.7,
+          ),
+          0.26,
+        ),
+      }
+    })
+
+  return (
+    <div aria-hidden="true" className="absolute inset-0 overflow-hidden opacity-50">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
+        <defs>
+          <filter id="pianoGlow">
+            <feGaussianBlur stdDeviation="0.55" />
+          </filter>
+        </defs>
+
+        <path
+          d="M-10 17C14 6 47 68 110 73"
+          fill="none"
+          stroke="rgba(196,196,196,0.04)"
+          strokeWidth="10.5"
+          strokeLinecap="round"
+          filter="url(#pianoGlow)"
+        />
+
+        <path
+          d={getKeyboardBodyPath()}
+          fill="none"
+          stroke="rgba(198,198,198,0.14)"
+          strokeWidth="0.18"
+        />
+
+        <g>
+          {whiteKeys.map((key) => (
+            <path
+              key={`white-key-${key.index}`}
+              d={key.path}
+              fill="none"
+              stroke="rgba(210,210,210,0.12)"
+              strokeWidth="0.07"
+            />
+          ))}
+          {blackKeys.map((key) => (
+            <path
+              key={`black-key-${key.index}`}
+              d={key.path}
+              fill="none"
+              stroke="rgba(168,168,168,0.18)"
+              strokeWidth="0.09"
+            />
+          ))}
+        </g>
+
+        <path
+          d={getKeyboardEdgePath(-HERO_KEYBOARD_HALF_WIDTH)}
+          fill="none"
+          stroke="rgba(214,214,214,0.16)"
+          strokeWidth="0.16"
+        />
+        <path
+          d={getKeyboardEdgePath(HERO_KEYBOARD_HALF_WIDTH)}
+          fill="none"
+          stroke="rgba(186,186,186,0.12)"
+          strokeWidth="0.14"
+        />
+      </svg>
+    </div>
+  )
+}
+
+function HeroGoldBackdrop() {
+  return (
+    <div aria-hidden="true" className="absolute inset-0 overflow-hidden opacity-80">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
+        <defs>
+          <filter id="goldSoftGlow">
+            <feGaussianBlur stdDeviation="1.4" />
+          </filter>
+        </defs>
+
+        <path
+          d="M-6 20C8 10 24 11 34 20C42 27 44 38 54 42C63 46 74 41 86 46C96 50 103 61 108 74"
+          fill="none"
+          stroke="rgba(243,213,143,0.30)"
+          strokeWidth="0.65"
+          strokeLinecap="round"
+          filter="url(#goldSoftGlow)"
+        />
+        <path
+          d="M-10 27C6 18 17 19 28 28C39 37 48 49 58 53C69 57 82 50 95 55C104 58 110 66 114 78"
+          fill="none"
+          stroke="rgba(212,177,90,0.34)"
+          strokeWidth="0.22"
+          strokeLinecap="round"
+        />
+
+        <path
+          d="M16 4C28 2 39 8 46 16C53 24 55 34 63 39C70 44 80 42 90 47"
+          fill="none"
+          stroke="rgba(212,177,90,0.20)"
+          strokeWidth="0.3"
+          strokeLinecap="round"
+          filter="url(#goldSoftGlow)"
+        />
+        <path
+          d="M10 66C22 58 34 57 44 63C53 68 57 78 67 82C76 86 88 83 101 90"
+          fill="none"
+          stroke="rgba(184,151,77,0.24)"
+          strokeWidth="0.42"
+          strokeLinecap="round"
+        />
+
+        <path
+          d="M30 18C36 14 44 15 49 20C54 25 54 33 60 36C65 39 73 37 80 41"
+          fill="none"
+          stroke="rgba(243,213,143,0.15)"
+          strokeWidth="0.14"
+          strokeLinecap="round"
+        />
+        <path
+          d="M40 55C48 50 57 51 64 57C71 63 73 72 81 76C87 79 95 78 103 82"
+          fill="none"
+          stroke="rgba(243,213,143,0.16)"
+          strokeWidth="0.16"
+          strokeLinecap="round"
+        />
+      </svg>
+    </div>
+  )
+}
+
 function App() {
   const MotionMain = motion.main
   const MotionSection = motion.section
+  const accountMenuRef = useRef(null)
   const [route, setRoute] = useState(() => getRouteFromHash(window.location.hash))
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
   const [authMode, setAuthMode] = useState('login')
   const [showPassword, setShowPassword] = useState(false)
   const [authFormError, setAuthFormError] = useState('')
@@ -336,19 +677,17 @@ function App() {
   const { detectKey, loading: keyLoading } = useKeyDetection()
   const checkoutState = useMemo(() => new URLSearchParams(window.location.search).get('checkout') || '', [])
   const accountPlanLabel = !isAuthenticated ? 'Log in to view plan' : billingLoading ? 'Checking...' : isProPlan ? 'BeatDrop Pro' : 'Free'
-  const studioEyebrow = isProPlan ? 'BeatDrop Pro Studio' : 'Free Plan Studio'
-  const studioHeading = isProPlan
-    ? 'Upload, refine, and publish with the full Pro workflow in one place.'
-    : 'Upload and publish the essentials without leaving the workspace.'
-  const studioDescription = isProPlan
-    ? 'Pro includes auto-detected metadata, reusable presets, upload scheduling, and faster publishing from the same studio.'
-    : 'Free includes MP3 upload, cover upload, manual title and description entry, and YouTube publishing. Upgrade when you want auto-detected metadata, reusable presets, and upload scheduling.'
   const effectiveDetails = isProPlan
     ? details
     : { ...details, schedulePublish: false, publishAt: '' }
+  const shouldHideStudioSummary = isAuthenticated && isProPlan
+  const accountInitial = useMemo(() => getAccountInitial(accountUser), [accountUser])
 
   useEffect(() => {
-    const syncRoute = () => setRoute(getRouteFromHash(window.location.hash))
+    const syncRoute = () => {
+      setRoute(getRouteFromHash(window.location.hash))
+      setIsAccountMenuOpen(false)
+    }
     window.addEventListener('hashchange', syncRoute)
     return () => window.removeEventListener('hashchange', syncRoute)
   }, [])
@@ -371,6 +710,7 @@ function App() {
 
   const navigateToHash = (hash) => (event) => {
     event.preventDefault()
+    setIsAccountMenuOpen(false)
     if (window.location.hash !== hash) {
       window.location.hash = hash
       return
@@ -379,6 +719,59 @@ function App() {
     setRoute(getRouteFromHash(hash))
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+
+  const accountMenu = isAuthenticated ? (
+    <div ref={accountMenuRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setIsAccountMenuOpen((prev) => !prev)}
+        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/[0.03] text-sm font-semibold text-white transition hover:border-white/24 hover:bg-white/[0.06]"
+        aria-haspopup="menu"
+        aria-expanded={isAccountMenuOpen}
+        aria-label="Open account menu"
+      >
+        {accountInitial}
+      </button>
+
+      {isAccountMenuOpen ? (
+        <div className="absolute right-0 top-[calc(100%+0.75rem)] w-72 rounded-[24px] border border-white/10 bg-[#111111] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.46)]">
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-white/40">Account</p>
+          <p className="mt-3 text-sm font-semibold text-white">
+            {accountUser?.name || 'BeatDrop account'}
+          </p>
+          <p className="mt-1 text-sm text-white/60">
+            {authLoading ? 'Checking...' : accountUser?.email || 'Not logged in'}
+          </p>
+          <p className="mt-3 text-sm text-white/60">
+            Current plan: <span className="font-semibold text-white">{accountPlanLabel}</span>
+          </p>
+
+          <div className="mt-4 flex flex-col gap-2">
+            <a
+              href="#upgrade"
+              onClick={(event) => {
+                setIsAccountMenuOpen(false)
+                navigateToHash('#upgrade')(event)
+              }}
+              className="inline-flex items-center justify-center rounded-full border border-white/12 bg-transparent px-4 py-2.5 text-sm font-semibold text-white transition hover:border-white/24 hover:bg-white/4"
+            >
+              {isProPlan ? 'Manage Plan' : 'See Upgrade Options'}
+            </a>
+            <button
+              type="button"
+              onClick={() => {
+                setIsAccountMenuOpen(false)
+                logoutAccount()
+              }}
+              className="inline-flex items-center justify-center rounded-full border border-white/12 bg-transparent px-4 py-2.5 text-sm font-semibold text-white transition hover:border-white/24 hover:bg-white/4"
+            >
+              Log Out
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  ) : null
 
   useEffect(() => {
     if (!audioFile || !isProPlan) return
@@ -405,6 +798,19 @@ function App() {
     if (checkoutState !== 'success' || !accountUser?.email) return
     refreshSubscription().catch(() => {})
   }, [accountUser, checkoutState, refreshSubscription])
+
+  useEffect(() => {
+    if (!isAccountMenuOpen) return
+
+    const handlePointerDown = (event) => {
+      if (!accountMenuRef.current?.contains(event.target)) {
+        setIsAccountMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [isAccountMenuOpen])
 
   const baseTitle = useMemo(() => {
     if (!audioFile) return 'Untitled Beat'
@@ -524,15 +930,7 @@ function App() {
               <BrandMark isPro={isProPlan} size="large" />
             </a>
             <div className="flex items-center gap-3">
-              {isAuthenticated ? (
-                <button
-                  type="button"
-                  onClick={logoutAccount}
-                  className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
-                >
-                  Log Out
-                </button>
-              ) : (
+              {!isAuthenticated ? (
                 <a
                   href="#login"
                   onClick={navigateToHash('#login')}
@@ -540,7 +938,7 @@ function App() {
                 >
                   Login
                 </a>
-              )}
+              ) : null}
               <a
                 href="#upgrade"
                 onClick={navigateToHash('#upgrade')}
@@ -575,67 +973,78 @@ function App() {
               >
                 Back
               </a>
+              {accountMenu}
             </div>
           </div>
         </div>
 
         <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-8 md:px-8 md:py-10">
-          <MotionSection
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45 }}
-            className={`${studioPanelClass} p-6 md:p-8`}
-          >
-            <div className="flex flex-col gap-4 border-b border-white/8 pb-5 md:flex-row md:items-end md:justify-between">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-[0.24em] text-white/45">{studioEyebrow}</p>
-                <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-white md:text-4xl">
-                  {studioHeading}
-                </h1>
-              </div>
-              <p className="max-w-2xl text-sm leading-7 text-white/60 md:text-base">{studioDescription}</p>
-            </div>
-
-            <div className="mt-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="space-y-1">
-                <p className="text-sm text-white/55">
-                  Account:{' '}
-                  <span className="font-semibold text-white">
-                    {authLoading ? 'Checking...' : accountUser?.email || 'Not logged in'}
-                  </span>
-                </p>
-                <p className="text-sm text-white/55">
-                  Current plan: <span className="font-semibold text-white">{accountPlanLabel}</span>
+          {!shouldHideStudioSummary ? (
+            <MotionSection
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45 }}
+              className={`${studioPanelClass} p-6 md:p-8`}
+            >
+              <div className="flex flex-col gap-4 border-b border-white/8 pb-5 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-[0.24em] text-white/45">
+                    {isProPlan ? 'BeatDrop Pro Studio' : 'Free Plan Studio'}
+                  </p>
+                  <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-white md:text-4xl">
+                    {isProPlan
+                      ? 'Upload, refine, and publish with the full Pro workflow in one place.'
+                      : 'Upload and publish the essentials without leaving the workspace.'}
+                  </h1>
+                </div>
+                <p className="max-w-2xl text-sm leading-7 text-white/60 md:text-base">
+                  {isProPlan
+                    ? 'Pro includes auto-detected metadata, reusable presets, upload scheduling, and faster publishing from the same studio.'
+                    : 'Free includes MP3 upload, cover upload, manual title and description entry, and YouTube publishing. Upgrade when you want auto-detected metadata, reusable presets, and upload scheduling.'}
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-3">
-                {isAuthenticated ? (
-                  <button
-                    onClick={logoutAccount}
-                    className="inline-flex items-center justify-center rounded-full border border-white/12 bg-transparent px-5 py-3 text-sm font-semibold text-white transition hover:border-white/24 hover:bg-white/4"
-                  >
-                    Log Out
-                  </button>
-                ) : (
+              <div className="mt-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm text-white/55">
+                    Account:{' '}
+                    <span className="font-semibold text-white">
+                      {authLoading ? 'Checking...' : accountUser?.email || 'Not logged in'}
+                    </span>
+                  </p>
+                  <p className="text-sm text-white/55">
+                    Current plan: <span className="font-semibold text-white">{accountPlanLabel}</span>
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  {isAuthenticated ? (
+                    <button
+                      onClick={logoutAccount}
+                      className="inline-flex items-center justify-center rounded-full border border-white/12 bg-transparent px-5 py-3 text-sm font-semibold text-white transition hover:border-white/24 hover:bg-white/4"
+                    >
+                      Log Out
+                    </button>
+                  ) : (
+                    <a
+                      href="#login"
+                      onClick={navigateToHash('#login')}
+                      className="inline-flex items-center justify-center rounded-full border border-white/12 bg-transparent px-5 py-3 text-sm font-semibold text-white transition hover:border-white/24 hover:bg-white/4"
+                    >
+                      Log In / Sign Up
+                    </a>
+                  )}
                   <a
-                    href="#login"
-                    onClick={navigateToHash('#login')}
+                    href="#upgrade"
+                    onClick={navigateToHash('#upgrade')}
                     className="inline-flex items-center justify-center rounded-full border border-white/12 bg-transparent px-5 py-3 text-sm font-semibold text-white transition hover:border-white/24 hover:bg-white/4"
                   >
-                    Log In / Sign Up
+                    See Upgrade Options
                   </a>
-                )}
-                <a
-                  href="#upgrade"
-                  onClick={navigateToHash('#upgrade')}
-                  className="inline-flex items-center justify-center rounded-full border border-white/12 bg-transparent px-5 py-3 text-sm font-semibold text-white transition hover:border-white/24 hover:bg-white/4"
-                >
-                  See Upgrade Options
-                </a>
+                </div>
               </div>
-            </div>
-          </MotionSection>
+            </MotionSection>
+          ) : null}
 
           <div className="grid gap-4">
             <Header
@@ -713,19 +1122,11 @@ function App() {
                   details={effectiveDetails}
                   setDetails={setDetails}
                   presets={presets}
+                  setPresets={setPresets}
                   selectedPresetId={selectedPresetId}
                   onPresetSelect={handlePresetSelection}
                   presetLocked={!isProPlan}
                   scheduleLocked={!isProPlan}
-                  proActive={isProPlan}
-                />
-                <PresetsPanel
-                  presets={presets}
-                  setPresets={setPresets}
-                  selectedPresetId={selectedPresetId}
-                  onSelectedPresetChange={handlePresetSelection}
-                  onApplyPreset={handleApplyPreset}
-                  locked={!isProPlan}
                   proActive={isProPlan}
                 />
                 <ConvertUploadPanel
@@ -758,15 +1159,7 @@ function App() {
               <BrandMark isPro={isProPlan} size="large" />
             </a>
             <div className="flex items-center gap-3">
-              {isAuthenticated ? (
-                <button
-                  type="button"
-                  onClick={logoutAccount}
-                  className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
-                >
-                  Log Out
-                </button>
-              ) : (
+              {!isAuthenticated ? (
                 <a
                   href="#login"
                   onClick={navigateToHash('#login')}
@@ -774,7 +1167,7 @@ function App() {
                 >
                   Login
                 </a>
-              )}
+              ) : null}
               <a href="#faq" className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block">
                 FAQ
               </a>
@@ -795,6 +1188,7 @@ function App() {
               >
                 Open Studio
               </a>
+              {accountMenu}
             </div>
           </div>
         </div>
@@ -808,7 +1202,7 @@ function App() {
             transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
             style={{
               background:
-                'radial-gradient(circle at 20% 22%, rgba(34,197,94,0.18), transparent 32%), radial-gradient(circle at 78% 24%, rgba(251,191,36,0.16), transparent 28%), radial-gradient(circle at 52% 78%, rgba(244,114,182,0.14), transparent 34%)',
+                'radial-gradient(circle at 20% 22%, rgba(212,177,90,0.16), transparent 32%), radial-gradient(circle at 78% 24%, rgba(243,213,143,0.12), transparent 28%), radial-gradient(circle at 52% 78%, rgba(184,151,77,0.14), transparent 34%)',
             }}
           />
           <div aria-hidden="true" className="absolute inset-0 opacity-[0.11]" style={noiseStyle} />
@@ -1146,6 +1540,15 @@ function App() {
               <BrandMark isPro={isProPlan} size="large" />
             </a>
             <div className="flex items-center gap-3">
+              {!isAuthenticated ? (
+                <a
+                  href="#login"
+                  onClick={navigateToHash('#login')}
+                  className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
+                >
+                  Login
+                </a>
+              ) : null}
               <a
                 href="#upgrade"
                 onClick={navigateToHash('#upgrade')}
@@ -1175,6 +1578,7 @@ function App() {
               >
                 Back
               </a>
+              {accountMenu}
             </div>
           </div>
         </div>
@@ -1405,6 +1809,15 @@ function App() {
               <BrandMark isPro={isProPlan} size="large" />
             </a>
             <div className="flex items-center gap-3">
+              {!isAuthenticated ? (
+                <a
+                  href="#login"
+                  onClick={navigateToHash('#login')}
+                  className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
+                >
+                  Login
+                </a>
+              ) : null}
               <a
                 href="#upgrade"
                 onClick={navigateToHash('#upgrade')}
@@ -1441,6 +1854,7 @@ function App() {
               >
                 Back
               </a>
+              {accountMenu}
             </div>
           </div>
         </div>
@@ -1454,7 +1868,7 @@ function App() {
             transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
             style={{
               background:
-                'radial-gradient(circle at 18% 22%, rgba(34,197,94,0.18), transparent 30%), radial-gradient(circle at 78% 28%, rgba(245,158,11,0.16), transparent 32%), radial-gradient(circle at 50% 78%, rgba(244,114,182,0.14), transparent 34%)',
+                'radial-gradient(circle at 18% 22%, rgba(212,177,90,0.16), transparent 30%), radial-gradient(circle at 78% 28%, rgba(243,213,143,0.12), transparent 32%), radial-gradient(circle at 50% 78%, rgba(184,151,77,0.14), transparent 34%)',
             }}
           />
           <div aria-hidden="true" className="absolute inset-0 opacity-[0.11]" style={noiseStyle} />
@@ -1550,6 +1964,15 @@ function App() {
               <BrandMark isPro={isProPlan} size="large" />
             </a>
             <div className="flex items-center gap-3">
+              {!isAuthenticated ? (
+                <a
+                  href="#login"
+                  onClick={navigateToHash('#login')}
+                  className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
+                >
+                  Login
+                </a>
+              ) : null}
               <a
                 href="#upgrade"
                 onClick={navigateToHash('#upgrade')}
@@ -1586,6 +2009,7 @@ function App() {
               >
                 Back
               </a>
+              {accountMenu}
             </div>
           </div>
         </div>
@@ -1599,7 +2023,7 @@ function App() {
             transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
             style={{
               background:
-                'radial-gradient(circle at 18% 22%, rgba(34,197,94,0.18), transparent 30%), radial-gradient(circle at 78% 28%, rgba(245,158,11,0.16), transparent 32%), radial-gradient(circle at 50% 78%, rgba(244,114,182,0.14), transparent 34%)',
+                'radial-gradient(circle at 18% 22%, rgba(212,177,90,0.16), transparent 30%), radial-gradient(circle at 78% 28%, rgba(243,213,143,0.12), transparent 32%), radial-gradient(circle at 50% 78%, rgba(184,151,77,0.14), transparent 34%)',
             }}
           />
           <div aria-hidden="true" className="absolute inset-0 opacity-[0.11]" style={noiseStyle} />
@@ -1695,15 +2119,7 @@ function App() {
             <BrandMark isPro={isProPlan} size="large" />
           </a>
           <div className="flex items-center gap-3">
-            {isAuthenticated ? (
-              <button
-                type="button"
-                onClick={logoutAccount}
-                className="hidden text-sm font-medium text-white/70 transition hover:text-white md:block"
-              >
-                Log Out
-              </button>
-            ) : (
+            {!isAuthenticated ? (
               <a
                 href="#login"
                 onClick={navigateToHash('#login')}
@@ -1711,7 +2127,7 @@ function App() {
               >
                 Login
               </a>
-            )}
+            ) : null}
             <a
               href="#upgrade"
               onClick={navigateToHash('#upgrade')}
@@ -1746,22 +2162,15 @@ function App() {
               >
                 Open Studio
               </a>
+              {accountMenu}
           </div>
         </div>
       </div>
 
       <MotionSection id="home" className="relative flex min-h-screen items-center overflow-hidden border-b border-white/6">
         <div className="absolute inset-0 bg-[#0a0a0a]" />
-        <motion.div
-          aria-hidden="true"
-          className="absolute inset-0 opacity-70"
-          animate={{ scale: [1, 1.08, 1], x: [0, 30, -20, 0], y: [0, -20, 15, 0] }}
-          transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
-          style={{
-            background:
-              'radial-gradient(circle at 18% 22%, rgba(34,197,94,0.18), transparent 30%), radial-gradient(circle at 78% 28%, rgba(245,158,11,0.16), transparent 32%), radial-gradient(circle at 50% 78%, rgba(244,114,182,0.14), transparent 34%)',
-          }}
-        />
+        <HeroGoldBackdrop />
+        <HeroMidiBackdrop />
         <div aria-hidden="true" className="absolute inset-0 opacity-[0.11]" style={noiseStyle} />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(10,10,10,0.20)_0%,rgba(10,10,10,0.46)_58%,rgba(10,10,10,0.82)_100%)]" />
 
@@ -1776,27 +2185,29 @@ function App() {
               Premium upload workflow for producers
             </span>
             <h1 className="mt-8 text-6xl font-extrabold leading-[0.9] tracking-[-0.07em] text-white md:text-8xl lg:text-[7.4rem]">
-              Turn your audio file into a fully customizable YouTube video.
+              Upload your beat.
+              <br />
+              It&apos;s live on YouTube in minutes.
             </h1>
             <p className="mt-7 max-w-3xl text-lg leading-9 text-white/70 md:text-xl">
-              BeatDrop gives producers one focused release desk to prep metadata, convert artwork and audio into a
-              publish-ready upload, and move fast without extra clutter.
+              Drop an MP3 and cover image. BeatDrop detects the BPM and key, fills your metadata from a saved preset,
+              and publishes directly to your channel — no editing software, no extra tabs.
             </p>
 
             <div className="mt-12 flex flex-col gap-4 sm:flex-row">
               <a
-                href="#studio"
-                className="inline-flex items-center justify-center rounded-full bg-[#f3f3f3] px-7 py-4 text-base font-semibold shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)] transition hover:bg-white"
+                href="#login"
+                onClick={navigateToHash('#login')}
+                className="group inline-flex items-center justify-center gap-3 self-start rounded-full bg-[#f3f3f3] px-9 py-5 text-lg font-semibold shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08),0_18px_50px_rgba(255,255,255,0.10)] transition duration-200 hover:-translate-y-0.5 hover:bg-white hover:shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08),0_22px_60px_rgba(255,255,255,0.16)]"
                 style={{ color: '#0a0a0a' }}
               >
                 Open the Studio
-              </a>
-              <a
-                href="#login"
-                onClick={navigateToHash('#login')}
-                className="inline-flex items-center justify-center rounded-full border border-white/18 bg-transparent px-7 py-4 text-base font-semibold text-white transition hover:border-white/30 hover:bg-white/4"
-              >
-                Sign Up / Login
+                <span
+                  aria-hidden="true"
+                  className="text-xl leading-none transition duration-200 group-hover:translate-x-1"
+                >
+                  →
+                </span>
               </a>
             </div>
           </motion.div>
