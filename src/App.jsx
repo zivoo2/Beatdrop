@@ -277,6 +277,26 @@ function BrandMark({ isPro = false, size = 'default' }) {
   )
 }
 
+function YouTubeLogoBadge({ size = 'default' }) {
+  const isLarge = size === 'large'
+
+  return (
+    <span className={`inline-flex items-center ${isLarge ? 'gap-3.5' : 'gap-3'}`}>
+      <svg
+        viewBox="0 0 28 20"
+        aria-hidden="true"
+        className={`${isLarge ? 'h-[1.75rem] w-[2.45rem]' : 'h-6 w-[2.1rem]'} shrink-0 drop-shadow-[0_10px_30px_rgba(255,0,51,0.18)]`}
+      >
+        <path fill="#FF0033" d="M27.3 3.1a3.4 3.4 0 0 0-2.4-2.4C22.8.1 14 .1 14 .1S5.2.1 3.1.7A3.4 3.4 0 0 0 .7 3.1C.1 5.2.1 10 .1 10s0 4.8.6 6.9a3.4 3.4 0 0 0 2.4 2.4c2.1.6 10.9.6 10.9.6s8.8 0 10.9-.6a3.4 3.4 0 0 0 2.4-2.4c.6-2.1.6-6.9.6-6.9s0-4.8-.6-6.9Z" />
+        <path fill="#fff" d="M11.2 14.4 18.5 10l-7.3-4.4v8.8Z" />
+      </svg>
+      <span className={`${isLarge ? 'text-[1.3rem]' : 'text-base'} font-semibold tracking-[0.01em] text-white`}>
+        YouTube
+      </span>
+    </span>
+  )
+}
+
 function getAccountInitial(user) {
   const source = String(user?.name || user?.email || '').trim()
   if (!source) return 'A'
@@ -2181,20 +2201,15 @@ function App() {
             transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
             className="max-w-5xl"
           >
-            <span className="inline-flex rounded-full border border-white/12 bg-white/4 px-4 py-1.5 text-sm font-medium uppercase tracking-[0.24em] text-white/70">
-              Premium upload workflow for producers
-            </span>
             <h1 className="mt-8 text-6xl font-extrabold leading-[0.9] tracking-[-0.07em] text-white md:text-8xl lg:text-[7.4rem]">
-              Upload your beat.
-              <br />
-              It&apos;s live on YouTube in minutes.
+              Upload your beats faster with full control.
             </h1>
             <p className="mt-7 max-w-3xl text-lg leading-9 text-white/70 md:text-xl">
-              Drop an MP3 and cover image. BeatDrop detects the BPM and key, fills your metadata from a saved preset,
-              and publishes directly to your channel — no editing software, no extra tabs.
+              Drop an MP3 and cover image. Customize and Crop. Detect the BPM and Key. Create title, description and
+              tag presets. Control scheduling. Publish directly to your channel quickly.
             </p>
 
-            <div className="mt-12 flex flex-col gap-4 sm:flex-row">
+            <div className="mt-12 flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-8">
               <a
                 href="#login"
                 onClick={navigateToHash('#login')}
@@ -2209,6 +2224,9 @@ function App() {
                   →
                 </span>
               </a>
+              <div className="self-start sm:self-auto">
+                <YouTubeLogoBadge size="large" />
+              </div>
             </div>
           </motion.div>
         </div>
@@ -2351,3 +2369,4 @@ function App() {
 }
 
 export default App
+
